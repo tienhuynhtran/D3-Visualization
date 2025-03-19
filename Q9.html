@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .chart-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 5px;
+        }
+        .chart { width: 90%; height: 350px; }
+        .tooltip {
+            position: absolute;
+            text-align: left;
+            padding: 5px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            border-radius: 5px;
+            pointer-events: none;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+    <h3 style="text-align:center; color: blue; font-size: 20px; font-weight: bold;">
+        Xác suất bán hàng của Mặt hàng theo Nhóm hàng
+    </h3>
+    <div class="chart-container" id="charts"></div>
+    <div id="tooltip" class="tooltip" style="opacity: 0;"></div>
+   
+    <script>
+        d3.csv("data_ggsheet - data.csv").then(data => {
+            const groupedData = d3.group(data, d => `[${d["Mã nhóm hàng"]}] ${d["Tên nhóm hàng"]}`);
+            const totalOrdersByGroup = new Map();
+           
+            groupedData.forEach((items, groupName) => {
+                const uniqueOrders = new Set(items.map(d => d["Mã đơn hàng"])).size;
+                totalOrdersByGroup.set(groupName, uniqueOrders);
+            });
+
+
+
+
+            const chartsContainer = d3.select("#charts");
+            const tooltip = d3.select("#tooltip");
+           
+            groupedData.forEach((items, groupName) => {
+                const totalOrders = totalOrdersByGroup.get(groupName);
+               
+                const itemCounts = d3.rollups(
+                    items,
+                    v => new Set(v.map(d => d["Mã đơn hàng"])).size,
+                    d => `[${d["Mã mặt hàng"]}] ${d["Tên mặt hàng"]}`
+                );
+
+
+
+
+                const processedData = itemCounts.map(([MatHang, SoDonHang]) => ({
+                    MatHang,
+                    SoDonHang,
+                    XacSuat: SoDonHang / totalOrders
+                })).sort((a, b) => b.XacSuat - a.XacSuat);
+               
+                const chartDiv = chartsContainer.append("div").attr("class", "chart");
+
+
+
+
+                chartDiv.append("h4")
+                    .text(groupName)
+                    .style("text-align", "center")
+                    .style("color", "darkblue")
+                    .style("font-size", "17px")
+                    .style("font-weight", "bold")
+                    .style("margin-bottom", "5px");
+
+
+
+
+                const svg = chartDiv.append("svg").attr("width", 500).attr("height", 600);
+
+
+
+
+                const margin = { top: 40, right: 20, bottom: 60, left: 150 };
+                const width = 400 - margin.left - margin.right;
+                const height = 250 - margin.top - margin.bottom;
+               
+                const x = d3.scaleLinear()
+                    .domain([0, d3.max(processedData, d => d.XacSuat)])
+                    .range([0, width]);
+
+
+
+
+                const y = d3.scaleBand()
+                    .domain(processedData.map(d => d.MatHang))
+                    .range([0, height])
+                    .padding(0.3);
+               
+                const color = d3.scaleOrdinal(d3.schemeSet2);
+               
+                const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+               
+                g.append("g")
+                    .call(d3.axisLeft(y).tickSize(0))
+                    .selectAll("text")
+                    .style("font-size", "9px");
+               
+                g.append("g")
+                    .attr("transform", `translate(0,${height})`)
+                    .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format(".0%")));
+               
+                g.selectAll(".bar")
+                    .data(processedData)
+                    .enter()
+                    .append("rect")
+                    .attr("class", "bar")
+                    .attr("x", 0)
+                    .attr("y", d => y(d.MatHang))
+                    .attr("width", d => x(d.XacSuat))
+                    .attr("height", y.bandwidth())
+                    .attr("fill", d => color(d.MatHang))
+                    .on("mouseover", function (event, d) {
+                        d3.select(this).attr("opacity", 0.7);
+                        tooltip.transition().duration(200).style("opacity", 1);
+                        tooltip.html(`
+                            <strong>Mặt hàng:</strong> ${d.MatHang}<br>
+                            <strong>Nhóm hàng:</strong> ${groupName}<br>
+                            <strong>Số lượng đơn:</strong> ${d.SoDonHang.toLocaleString()} SKUs <br>
+                            <strong>Xác suất:</strong> ${(d.XacSuat * 100).toFixed(1)}%
+                        `)
+                            .style("left", (event.pageX + 15) + "px")
+                            .style("top", (event.pageY - 28) + "px");
+                    })
+                    .on("mouseout", function () {
+                        d3.select(this).attr("opacity", 1);
+                        tooltip.transition().duration(300).style("opacity", 0);
+                    });
+               
+                g.selectAll(".label")
+                    .data(processedData)
+                    .enter()
+                    .append("text")
+                    .attr("class", "label")
+                    .attr("x", d => x(d.XacSuat) + 5)
+                    .attr("y", d => y(d.MatHang) + y.bandwidth() / 2)
+                    .attr("dy", "0.35em")
+                    .style("font-size", "11px")
+                    .text(d => (d.XacSuat * 100).toFixed(1) + "%");
+            });
+        });
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+

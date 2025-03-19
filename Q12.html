@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .chart-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .chart {
+            margin: 20px;
+            text-align: center;
+        }
+        .tooltip {
+            position: absolute;
+            text-align: left;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            border-radius: 5px;
+            pointer-events: none;
+            font-size: 13px;
+        }
+        h3 {
+            font-size: 16px;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="chart-container" id="charts"></div>
+    <div class="tooltip" id="tooltip"></div>
+    <script>
+        d3.csv("data_ggsheet - data.csv").then(data => {
+            console.log("Dữ liệu đọc từ CSV:", data);
+ 
+            data.forEach(d => {
+                d.T = d3.timeFormat("%m")(new Date(d["Thời gian tạo đơn"]));
+                d["Thành tiền"] = +d["Thành tiền"];
+            });
+
+
+
+
+            const chiTieuKhachHang = d3.rollup(
+                data,
+                v => d3.sum(v, d => d["Thành tiền"]),
+                d => d["Mã khách hàng"]
+            );
+
+
+
+
+            let chiTieuArray = Array.from(chiTieuKhachHang, ([khachHang, tongTien]) => ({
+                khachHang, tongTien
+            }));
+
+
+
+
+            const maxValue = d3.max(chiTieuArray, d => d.tongTien);
+            const thresholds = d3.range(0, maxValue + 50000, 50000);
+            thresholds[0] = 0;
+
+
+
+
+            const bins = d3.bin()
+                .domain([0, maxValue])  
+                .thresholds(thresholds)
+                (chiTieuArray.map(d => d.tongTien));
+
+
+
+
+            const width = 1600, height = 700, margin = { top: 50, right: 50, bottom: 80, left: 120 };
+
+
+
+
+            const x = d3.scaleLinear()
+                .domain([0, maxValue])
+                .range([margin.left, width - margin.right]);
+
+
+
+
+            const y = d3.scaleLinear()
+                .domain([0, d3.max(bins, d => d.length)])
+                .range([height - margin.bottom, margin.top]);
+
+
+
+
+            const container = d3.select("#charts").append("div").attr("class", "chart");
+            container.append("h3").text("Phân phối mức chi trả của khách hàng");
+
+
+
+
+            const svg = container.append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+
+
+
+                const tickValues = d3.range(0, maxValue + 50000, 50000);
+
+
+
+
+            svg.append("g")
+                .attr("transform", `translate(0,${height - margin.bottom})`)
+                .call(d3.axisBottom(x)
+                    .tickValues(tickValues)
+                    .tickFormat(d => `${d / 1000}K`)
+                )
+                .selectAll("text")
+                .style("text-anchor", "end")
+                .attr("transform", "rotate(-90)");
+
+
+
+
+            svg.append("g")
+                .attr("transform", `translate(${margin.left},0)`)
+                .call(d3.axisLeft(y).tickFormat(d => d >= 1000 ? `${(d / 1e3).toFixed(1)}K` : d));
+
+
+
+
+            const tooltip = d3.select("#tooltip");
+
+
+
+
+            svg.selectAll("rect")
+                .data(bins)
+                .enter().append("rect")
+                .attr("x", d => x(d.x0))
+                .attr("y", d => y(d.length))
+                .attr("width", d => x(d.x1) - x(d.x0) - 1)
+                .attr("height", d => height - margin.bottom - y(d.length))
+                .attr("fill", "steelblue")
+                .on("mouseover", (event, d) => {
+                    tooltip.style("visibility", "visible")
+                        .html(`<strong>Mức chi trả:</strong> ${d.x0.toLocaleString()} - ${d.x1.toLocaleString()} VND<br>` +
+                              `<strong>Số lượng KH:</strong> ${d.length}`)
+                        .style("top", `${event.pageY - 10}px`)
+                        .style("left", `${event.pageX + 10}px`);
+                })
+                .on("mousemove", event => {
+                    tooltip.style("top", `${event.pageY - 10}px`)
+                           .style("left", `${event.pageX + 10}px`);
+                })
+                .on("mouseout", () => {
+                    tooltip.style("visibility", "hidden");
+                });
+        });
+    </script>
+</body>
+</html>
+
+
+

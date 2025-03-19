@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        text {
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <svg id="chart" width="1000" height="500"></svg>
+    <script>
+        d3.csv("data_ggsheet - data.csv").then(data => {
+            console.log("Dữ liệu đọc từ CSV:", data);
+
+
+            // Chuyển 'Thời gian tạo đơn' thành dạng ngày tháng
+            data.forEach(d => {
+                d["Thời gian tạo đơn"] = new Date(d["Thời gian tạo đơn"]);
+                d.Tháng = `Tháng ${String(d["Thời gian tạo đơn"].getMonth() + 1).padStart(2, '0')}`;
+            });
+
+
+            // Gộp doanh thu theo tháng
+            const aggregatedData = d3.rollup(
+                data,
+                v => d3.sum(v, d => +d["Thành tiền"]),
+                d => d.Tháng
+            );
+
+
+            // Sắp xếp đúng theo thứ tự tháng
+            const processedData = Array.from(aggregatedData, ([Tháng, TongThanhTien]) => ({
+                Tháng,
+                TongThanhTien
+            })).sort((a, b) => a.Tháng.localeCompare(b.Tháng));
+
+
+            const width = 1100, height = 600;
+            const margin = { top: 40, right: 50, bottom: 50, left: 100 };
+
+
+            const svg = d3.select("#chart")
+                .attr("width", width)
+                .attr("height", height);
+
+
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", margin.top / 2)
+                .attr("text-anchor", "middle")
+                .style("font-size", "18px")
+                .style("font-weight", "bold")
+                .text("Doanh số bán hàng theo Tháng");
+
+
+            // Chia đơn vị theo triệu VND
+            const maxValue = d3.max(processedData, d => d.TongThanhTien) / 1e6;
+            const tickStep = Math.ceil(maxValue / 100) * 100; // Chia theo bội số của 100 triệu
+            const y = d3.scaleLinear()
+                .domain([0, tickStep])
+                .range([height - margin.bottom, margin.top]);
+
+
+            const x = d3.scaleBand()
+                .domain(processedData.map(d => d.Tháng))
+                .range([margin.left, width - margin.right])
+                .padding(0.3);
+
+
+            // Trục X - Tháng
+            svg.append("g")
+                .attr("transform", `translate(0,${height - margin.bottom})`)
+                .call(d3.axisBottom(x));
+
+
+            // Trục Y - Doanh số
+            svg.append("g")
+                .attr("transform", `translate(${margin.left},0)`)
+                .call(d3.axisLeft(y).ticks(tickStep / 100).tickFormat(d => `${d}M`));
+
+
+            // Tạo màu sắc cho từng tháng
+            const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+
+            const bars = svg.selectAll(".bar")
+                .data(processedData)
+                .enter().append("rect")
+                .attr("class", "bar")
+                .attr("x", d => x(d.Tháng))
+                .attr("y", d => y(d.TongThanhTien / 1e6))
+                .attr("width", x.bandwidth())
+                .attr("height", d => height - margin.bottom - y(d.TongThanhTien / 1e6))
+                .attr("fill", (d, i) => colorScale(i))
+                .on("mouseover", function() { d3.select(this).attr("opacity", 0.7); })
+                .on("mouseout", function() { d3.select(this).attr("opacity", 1); });
+
+
+            bars.append("title")
+                .text(d => `Thành tiền: ${d.TongThanhTien.toLocaleString()} VND`);
+
+
+            // Nhãn trên cột
+            svg.selectAll(".label")
+                .data(processedData)
+                .enter().append("text")
+                .attr("x", d => x(d.Tháng) + x.bandwidth() / 2)
+                .attr("y", d => y(d.TongThanhTien / 1e6) - 5)
+                .attr("text-anchor", "middle")
+                .style("font-size", "10px")
+                .text(d => `${Math.round(d.TongThanhTien / 1e6)} triệu VNĐ`)
+                .attr("fill", "black");
+        }).catch(error => {
+            console.error("Lỗi khi tải file CSV:", error);
+        });
+    </script>
+</body>
+</html>
+
+
+

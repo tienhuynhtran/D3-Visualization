@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .bar { stroke: black; stroke-width: 1px; fill: steelblue; }
+        .tooltip {
+            position: absolute;
+            text-align: left;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            border-radius: 5px;
+            pointer-events: none;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <h3 style="text-align:center; color: blue; font-size: 28px; font-weight: bold;">
+        Phân phối số lần mua hàng theo khách hàng
+    </h3>
+    <svg id="chart"></svg>
+    <div id="tooltip" class="tooltip" style="opacity: 0;"></div>
+   
+    <script>
+        d3.csv("data_ggsheet - data.csv").then(data => {
+            console.log("Dữ liệu đã đọc:", data);
+
+
+
+
+            const purchaseCounts = d3.rollups(
+                data,
+                v => new Set(v.map(d => d["Mã đơn hàng"])).size,
+                d => d["Mã khách hàng"]
+            );
+
+
+
+
+            const distribution = d3.rollups(
+                purchaseCounts,
+                v => v.length,
+                d => d[1]
+            ).map(([LanMua, SoKhach]) => ({ LanMua, SoKhach }))
+            .sort((a, b) => a.LanMua - b.LanMua);
+
+
+
+
+            const margin = {top: 40, right: 60, bottom: 60, left: 80},
+            width = 1800 - margin.left - margin.right,
+            height = 800 - margin.top - margin.bottom;
+
+
+
+
+            const svg = d3.select("#chart")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom);
+
+
+
+
+
+
+
+
+            const x = d3.scaleBand()
+                .domain(distribution.map(d => d.LanMua))
+                .range([margin.left, width])
+                .padding(0.3);
+
+
+
+
+            const y = d3.scaleLinear()
+                .domain([0, d3.max(distribution, d => d.SoKhach)])
+                .range([height, margin.top]);
+
+
+
+
+
+
+
+
+            const tooltip = d3.select("#tooltip");
+
+
+
+
+
+
+
+
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x));
+
+
+
+
+
+
+
+
+            svg.append("g")
+                .attr("transform", `translate(${margin.left},0)`)
+                .call(d3.axisLeft(y));
+
+
+
+
+            svg.selectAll(".bar")
+                .data(distribution)
+                .enter()
+                .append("rect")
+                .attr("class", "bar")
+                .attr("x", d => x(d.LanMua))
+                .attr("y", d => y(d.SoKhach))
+                .attr("width", x.bandwidth())
+                .attr("height", d => height - y(d.SoKhach))
+                .on("mouseover", function (event, d) {
+                    d3.select(this).attr("opacity", 0.7);
+                    tooltip.transition().duration(200).style("opacity", 1);
+                    tooltip.html(`
+                        <strong>Lần mua:</strong> ${d.LanMua}<br>
+                        <strong>Số lượng KH: </strong> ${d.SoKhach}
+                    `)
+                        .style("left", (event.pageX + 15) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function () {
+                    d3.select(this).attr("opacity", 1);
+                    tooltip.transition().duration(300).style("opacity", 0);
+                });
+
+
+
+
+        });
+    </script>
+</body>
+</html>
+
+
+

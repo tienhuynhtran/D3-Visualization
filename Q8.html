@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .tooltip {
+            position: absolute;
+            text-align: left;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            border-radius: 5px;
+            pointer-events: none;
+            font-size: 12px;
+        }
+        .legend {
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .legend rect {
+            width: 12px;
+            height: 12px;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <svg id="chart" width="1000" height="600"></svg>
+    <div class="tooltip" id="tooltip"></div>
+    <script>
+        d3.csv("data_ggsheet - data.csv").then(data => {
+            console.log("Dữ liệu đọc từ CSV:", data);
+
+
+            data.forEach(d => {
+                d.Tháng = "Tháng " + (new Date(d["Thời gian tạo đơn"]).getMonth() + 1).toString().padStart(2, '0');
+                d.Nhom_hang = `[${d["Mã nhóm hàng"]}] ${d["Tên nhóm hàng"]}`;
+            });
+
+
+            let donTheoThang = d3.rollup(
+                data,
+                v => new Set(v.map(d => d["Mã đơn hàng"])).size,
+                d => d.Tháng
+            );
+
+
+            let processedData = d3.flatRollup(
+                data,
+                v => {
+                    let so_don_hang = new Set(v.map(d => d["Mã đơn hàng"])).size;
+                    let Tong_don_hang = donTheoThang.get(v[0].Tháng) || 1;
+                    return {
+                        so_don_hang,
+                        Tong_don_hang,
+                        XacSuat: (so_don_hang / Tong_don_hang) * 100
+                    };
+                },
+                d => d.Tháng,
+                d => d.Nhom_hang
+            ).map(([Tháng, Nhom_hang, values]) => ({ Tháng, Nhom_hang, ...values }));
+
+
+            const width = 1000, height = 600;
+            const margin = { top: 40, right: 100, bottom: 50, left: 220 };
+
+
+            const svg = d3.select("#chart")
+                .attr("width", width)
+                .attr("height", height);
+
+
+            const x = d3.scaleBand()
+                .domain([...new Set(processedData.map(d => d.Tháng))])
+                .range([margin.left, width - margin.right])
+                .padding(0.2);
+
+
+            const y = d3.scaleLinear()
+                .domain([0, d3.max(processedData, d => d.XacSuat)])
+                .nice()
+                .range([height - margin.bottom, margin.top]);
+
+
+            const colorScale = d3.scaleOrdinal(d3.schemeCategory10)
+                .domain([...new Set(processedData.map(d => d.Nhom_hang))]);
+
+
+            const line = d3.line()
+                .x(d => x(d.Tháng) + x.bandwidth() / 2)
+                .y(d => y(d.XacSuat));
+
+
+            const groups = d3.groups(processedData, d => d.Nhom_hang);
+
+
+            groups.forEach(([nhom, values]) => {
+                svg.append("path")
+                    .datum(values)
+                    .attr("fill", "none")
+                    .attr("stroke", colorScale(nhom))
+                    .attr("stroke-width", 2)
+                    .attr("d", line);
+            });
+
+
+            const tooltip = d3.select("#tooltip");
+
+
+            svg.selectAll("circle")
+                .data(processedData)
+                .enter().append("circle")
+                .attr("cx", d => x(d.Tháng) + x.bandwidth() / 2)
+                .attr("cy", d => y(d.XacSuat))
+                .attr("r", 4)
+                .attr("fill", d => colorScale(d.Nhom_hang))
+                .on("mouseover", (event, d) => {
+                    tooltip.style("display", "block")
+                        .html(`Tháng: ${d.Tháng}<br>Nhóm hàng: ${d.Nhom_hang}<br>Xác suất: ${d.XacSuat.toFixed(0)}%`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 20) + "px");
+                })
+                .on("mouseout", () => tooltip.style("display", "none"));
+
+
+            svg.append("g")
+                .attr("transform", `translate(0,${height - margin.bottom})`)
+                .call(d3.axisBottom(x));
+
+
+            svg.append("g")
+                .attr("transform", `translate(${margin.left},0)`)
+                .call(d3.axisLeft(y).tickFormat(d => d + "%"));
+
+
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", margin.top / 2)
+                .attr("text-anchor", "middle")
+                .style("font-size", "18px")
+                .style("font-weight", "bold")
+                .text("Xác suất bán hàng của nhóm hàng trong từng tháng");
+
+
+            const legend = svg.append("g")
+                .attr("transform", `translate(${width - margin.right - 10},${margin.top})`);
+
+
+            groups.forEach(([nhom, values], i) => {
+                const legendRow = legend.append("g")
+                    .attr("transform", `translate(0, ${i * 20})`);
+
+
+                legendRow.append("rect")
+                    .attr("width", 12)
+                    .attr("height", 12)
+                    .attr("fill", colorScale(nhom));
+
+
+                legendRow.append("text")
+                    .attr("x", 18)
+                    .attr("y", 10)
+                    .text(nhom)
+                    .style("font-size", "12px")
+                    .attr("alignment-baseline", "middle");
+            });
+        });
+    </script>
+</body>
+</html>
+
+
+

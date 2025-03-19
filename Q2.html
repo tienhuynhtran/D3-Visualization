@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        text {
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <svg id="chart" width="1000" height="600"></svg>
+    <script>
+        d3.csv("data_ggsheet - data.csv").then(data => {
+            console.log("Dữ liệu đọc từ CSV:", data);
+
+
+            // Gộp doanh thu theo nhóm hàng
+            const aggregatedData = d3.rollup(
+                data,
+                v => d3.sum(v, d => +d["Thành tiền"]),
+                d => `[${d["Mã nhóm hàng"]}] ${d["Tên nhóm hàng"]}`
+            );
+
+
+            const processedData = Array.from(aggregatedData, ([Nhom_hang, TongThanhTien]) => ({
+                Nhom_hang,
+                TongThanhTien
+            })).sort((a, b) => b.TongThanhTien - a.TongThanhTien);
+
+
+            const width = 1000, height = 600;
+            const margin = { top: 40, right: 100, bottom: 50, left: 220 };
+
+
+            const svg = d3.select("#chart")
+                .attr("width", width)
+                .attr("height", height);
+
+
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", margin.top / 2)
+                .attr("text-anchor", "middle")
+                .style("font-size", "18px")
+                .style("font-weight", "bold")
+                .text("Doanh số bán hàng theo Nhóm hàng");
+
+
+            // Chia đơn vị theo triệu VND
+            const maxValue = d3.max(processedData, d => d.TongThanhTien) / 1e6;
+            const tickStep = Math.ceil(maxValue / 100) * 100; // Chia theo bội số của 100 triệu
+            const x = d3.scaleLinear()
+                .domain([0, tickStep])
+                .range([margin.left, width - margin.right]);
+
+
+            const y = d3.scaleBand()
+                .domain(processedData.map(d => d.Nhom_hang))
+                .range([margin.top, height - margin.bottom])
+                .padding(0.3);
+
+
+            svg.append("g")
+                .attr("transform", `translate(0,${height - margin.bottom})`)
+                .call(d3.axisBottom(x)
+                    .ticks(tickStep / 100) // Hiển thị theo bội số 100M
+                    .tickFormat(d => `${d}M`));
+
+
+            svg.append("g")
+                .attr("transform", `translate(${margin.left},0)`)
+                .call(d3.axisLeft(y));
+
+
+            // Màu sắc tự động cho từng nhóm hàng
+            const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+
+            const bars = svg.selectAll(".bar")
+                .data(processedData)
+                .enter().append("rect")
+                .attr("class", "bar")
+                .attr("y", d => y(d.Nhom_hang))
+                .attr("x", margin.left)
+                .attr("width", d => x(d.TongThanhTien / 1e6) - margin.left)
+                .attr("height", y.bandwidth())
+                .attr("fill", (d, i) => colorScale(i))
+                .on("mouseover", function() { d3.select(this).attr("opacity", 0.7); })
+                .on("mouseout", function() { d3.select(this).attr("opacity", 1); });
+
+
+            bars.append("title")
+                .text(d => `Thành tiền: ${d.TongThanhTien.toLocaleString()} VND`);
+
+
+            svg.selectAll(".label")
+                .data(processedData)
+                .enter().append("text")
+                .attr("x", d => x(d.TongThanhTien / 1e6) + 5)
+                .attr("y", d => y(d.Nhom_hang) + y.bandwidth() / 2)
+                .attr("alignment-baseline", "middle")
+                .style("font-size", "12px")
+                .text(d => `${Math.round(d.TongThanhTien / 1e6)} triệu VND`)
+                .attr("fill", "black");
+        }).catch(error => {
+            console.error("Lỗi khi tải file CSV:", error);
+        });
+    </script>
+</body>
+</html>
+
+
+

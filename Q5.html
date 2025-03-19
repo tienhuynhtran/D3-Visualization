@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        text {
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <svg id="chart" width="1300" height="600"></svg>
+    <script>
+        d3.csv("data_ggsheet - data.csv").then(data => {
+            console.log("Dữ liệu đọc từ CSV:", data);
+
+
+            // Chuyển 'Thời gian tạo đơn' thành dạng ngày tháng
+            data.forEach(d => {
+                d["Thời gian tạo đơn"] = new Date(d["Thời gian tạo đơn"]);
+                d.Ngay = d["Thời gian tạo đơn"].getDate(); // Lấy ngày trong tháng
+            });
+
+
+            // Nhóm theo Ngày trong tháng và tính tổng doanh thu, số ngày có đơn
+            const aggregatedData = d3.rollups(
+                data,
+                v => ({
+                    Tổng_doanh_thu: d3.sum(v, d => +d["Thành tiền"]),
+                    Số_ngày_co_don: d3.rollup(v, d => new Set(d.map(x => x["Thời gian tạo đơn"].toDateString())).size)
+                }),
+                d => d.Ngay
+            );
+
+
+            // Tạo danh sách dữ liệu đã xử lý
+            const processedData = aggregatedData.map(([Ngay, values]) => ({
+                Ngay: `Ngày ${Ngay}`,  // Thêm chữ "Ngày" trước số
+                Doanh_thu_trung_binh: values.Tổng_doanh_thu / values.Số_ngày_co_don
+            })).sort((a, b) => parseInt(a.Ngay.split(" ")[1]) - parseInt(b.Ngay.split(" ")[1]));
+
+
+            const width = 1300, height = 600;
+            const margin = { top: 40, right: 100, bottom: 60, left: 100 };
+
+
+            const svg = d3.select("#chart")
+                .attr("width", width)
+                .attr("height", height);
+
+
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", margin.top / 2)
+                .attr("text-anchor", "middle")
+                .style("font-size", "18px")
+                .style("font-weight", "bold")
+                .text("Doanh số bán hàng trung bình theo Ngày trong tháng");
+
+
+            // Chia đơn vị theo triệu VND
+            const maxValue = d3.max(processedData, d => d.Doanh_thu_trung_binh) / 1e6;
+            const tickStep = Math.ceil(maxValue / 1) * 1; // Chia theo bội số của 1 triệu
+            const y = d3.scaleLinear()
+                .domain([0, tickStep])
+                .range([height - margin.bottom, margin.top]);
+
+
+            const x = d3.scaleBand()
+                .domain(processedData.map(d => d.Ngay))
+                .range([margin.left, width - margin.right])
+                .padding(0.3);
+
+
+            svg.append("g")
+                .attr("transform", `translate(${margin.left},0)`)
+                .call(d3.axisLeft(y)
+                    .ticks(tickStep)
+                    .tickFormat(d => `${d}M`));
+
+
+            svg.append("g")
+                .attr("transform", `translate(0,${height - margin.bottom})`)
+                .call(d3.axisBottom(x))
+                .selectAll("text")
+                .attr("transform", "rotate(-45)") // Xoay nhãn ngày để dễ đọc
+                .style("text-anchor", "end");
+
+
+            // Tạo màu sắc cho từng ngày
+            const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+
+            const bars = svg.selectAll(".bar")
+                .data(processedData)
+                .enter().append("rect")
+                .attr("class", "bar")
+                .attr("x", d => x(d.Ngay))
+                .attr("y", d => y(d.Doanh_thu_trung_binh / 1e6))
+                .attr("width", x.bandwidth())
+                .attr("height", d => height - margin.bottom - y(d.Doanh_thu_trung_binh / 1e6))
+                .attr("fill", (d, i) => colorScale(i))
+                .on("mouseover", function() { d3.select(this).attr("opacity", 0.7); })
+                .on("mouseout", function() { d3.select(this).attr("opacity", 1); });
+
+
+            bars.append("title")
+                .text(d => `Thành tiền: ${d.Doanh_thu_trung_binh.toLocaleString("vi-VN")} VND`);
+
+
+            // Nhãn giá trị trên cột (làm tròn 1 chữ số thập phân)
+            svg.selectAll(".label")
+                .data(processedData)
+                .enter().append("text")
+                .attr("x", d => x(d.Ngay) + x.bandwidth() / 2)
+                .attr("y", d => y(d.Doanh_thu_trung_binh / 1e6) - 5)
+                .attr("text-anchor", "middle")
+                .style("font-size", "10px")
+                .text(d => `${(d.Doanh_thu_trung_binh / 1e6).toFixed(1)} tr`) // Làm tròn 1 chữ số thập phân
+                .attr("fill", "black");
+        }).catch(error => {
+            console.error("Lỗi khi tải file CSV:", error);
+        });
+    </script>
+</body>
+</html>
+
+
+

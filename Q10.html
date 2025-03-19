@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        #charts {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            max-width: 1000px;
+            margin: auto;
+        }
+        .chart-container {
+            background: white;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px;
+            border-radius: 5px;
+            font-size: 10px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+            left: 0;
+            top: 0;
+        }
+
+
+
+
+        h3 {
+            text-align: center;
+            color: blue;
+            font-size: 26px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .legend {
+            font-size: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h3 style="text-align:center; color: blue; font-size: 20px; font-weight: bold;">
+        Xác suất bán hàng của Mặt hàng theo Nhóm hàng trong từng Tháng
+    </h3>
+    <div class="chart-container" id="charts"></div>
+    <div id="tooltip" class="tooltip" style="opacity: 0;"></div>
+    <div id="charts"></div>
+    <div class="tooltip" id="tooltip"></div>
+
+
+
+
+
+
+
+
+    <script>
+        d3.csv("data_ggsheet - data.csv").then(data => {
+            console.log("Dữ liệu từ CSV:", data);
+
+
+
+
+            data.forEach(d => {
+                d.Tháng = "T" + String(new Date(d["Thời gian tạo đơn"]).getMonth() + 1).padStart(2, "0");
+                d.NhomHang = `[${d["Mã nhóm hàng"]}] ${d["Tên nhóm hàng"]}`;
+                d.MatHang = `[${d["Mã mặt hàng"]}] ${d["Tên mặt hàng"]}`;
+            });
+
+
+
+
+            let donTheoNhomThang = d3.rollup(
+                data,
+                v => new Set(v.map(d => d["Mã đơn hàng"])).size,
+                d => d.Tháng,
+                d => d.NhomHang
+            );
+
+
+
+
+            let processedData = d3.flatRollup(
+                data,
+                v => {
+                    let soDonHang = new Set(v.map(d => d["Mã đơn hàng"])).size;
+                    let tongDonHangNhom = donTheoNhomThang.get(v[0].Tháng)?.get(v[0].NhomHang) || 1;
+                    return {
+                        soDonHang,
+                        tongDonHangNhom,
+                        xacSuat: (soDonHang / tongDonHangNhom) * 100
+                    };
+                },
+                d => d.Tháng,
+                d => d.NhomHang,
+                d => d.MatHang
+            ).map(([Tháng, NhomHang, MatHang, values]) => ({ Tháng, NhomHang, MatHang, ...values }));
+
+
+
+
+            const groups = d3.groups(processedData, d => d.NhomHang);
+
+
+
+
+            const width = 400, height = 250;
+            const margin = { top: 30, right: 0, bottom: 50, left: 20 };
+
+
+
+
+            groups.forEach(([nhomHang, values]) => {
+                let container = d3.select("#charts")
+                    .append("div")
+                    .attr("class", "chart-container");
+
+
+
+
+                container.append("h3")
+                    .text(`${nhomHang}`);
+
+
+
+
+                let svg = container.append("svg")
+                    .attr("width", width)
+                    .attr("height", height);
+
+
+
+
+                const x = d3.scaleBand()
+                    .domain([...new Set(values.map(d => d.Tháng))])
+                    .range([margin.left, width - margin.right])
+                    .padding(0.2);
+
+
+
+
+                let yMax = nhomHang.includes("Bột") ? 110 : d3.max(values, d => d.xacSuat);
+                let yMin = nhomHang.includes("Bột") ? 90 : 0;
+
+
+
+
+                const y = d3.scaleLinear()
+                    .domain([yMin, yMax])
+                    .nice()
+                    .range([height - margin.bottom, margin.top]);
+
+
+
+
+                const colorScale = d3.scaleOrdinal(d3.schemeCategory10)
+                    .domain([...new Set(values.map(d => d.MatHang))]);
+
+
+
+
+                const line = d3.line()
+                    .x(d => x(d.Tháng) + x.bandwidth() / 2)
+                    .y(d => y(d.xacSuat));
+
+
+
+
+                const subGroups = d3.groups(values, d => d.MatHang);
+
+
+
+
+                subGroups.forEach(([matHang, data]) => {
+                    svg.append("path")
+                        .datum(data)
+                        .attr("fill", "none")
+                        .attr("stroke", colorScale(matHang))
+                        .attr("stroke-width", 2)
+                        .attr("d", line);
+                });
+
+
+
+
+                const tooltip = d3.select("#tooltip");
+
+
+
+
+                svg.selectAll("circle")
+                    .data(values)
+                    .enter().append("circle")
+                    .attr("cx", d => x(d.Tháng) + x.bandwidth() / 2)
+                    .attr("cy", d => y(d.xacSuat))
+                    .attr("r", 2)
+                    .attr("fill", d => colorScale(d.MatHang))
+                    .on("mouseover", function (event, d) {
+                        d3.select(this).attr("opacity", 0.7);
+                        tooltip.style("opacity", 1)
+                            .html(`
+                                <strong>Tháng tạo đơn:</strong> ${d.Tháng}<br>
+                                <strong>Mặt hàng:</strong> ${d.MatHang}<br>
+                                <strong>Nhóm hàng:</strong> ${d.NhomHang}<br>
+                                <strong>SL Đơn Bán:</strong> ${d.tongDonHangNhom}<br>
+                                <strong>Xác suất Bán/Nhóm hàng:</strong> ${d.xacSuat.toFixed(2)}%
+                            `);
+                    })
+                    .on("mousemove", function (event) {
+                        tooltip.style("left", (event.pageX + 15) + "px")
+                            .style("top", (event.pageY - 28) + "px");
+                    })
+                    .on("mouseout", function () {
+                        d3.select(this).attr("opacity", 1);
+                        tooltip.style("opacity", 0);
+                    });
+
+
+
+
+                svg.append("g")
+                    .attr("transform", `translate(0,${height - margin.bottom})`)
+                    .call(d3.axisBottom(x));
+
+
+
+
+                svg.append("g")
+                    .attr("transform", `translate(${margin.left},0)`)
+                    .call(d3.axisLeft(y)
+                        .tickValues([90, 100, 110])
+                        .tickFormat(d => d + "%")
+                    );
+
+
+
+
+                const legend = svg.append("g")
+                    .attr("transform", `translate(${margin.left},${height - margin.bottom + 30})`);
+
+
+
+
+                const columns = 3;
+                const rowHeight = 7;
+
+
+
+
+                subGroups.forEach(([matHang], i) => {
+                    const row = Math.floor(i / columns);
+                    const col = i % columns;
+
+
+
+
+                    const legendRow = legend.append("g")
+                        .attr("transform", `translate(${col * 150}, ${row * rowHeight})`);
+
+
+
+
+                    legendRow.append("rect")
+                        .attr("width", 5)
+                        .attr("height", 5)
+                        .attr("fill", colorScale(matHang))
+
+
+
+
+                    legendRow.append("text")
+                        .attr("x", 10)
+                        .attr("y", 4)
+                        .text(matHang)
+                        .style("font-size", "8px")
+                        .attr("alignment-baseline", "middle");
+                });
+
+
+
+
+            });
+        });
+    </script>
+</body>
+</html>
+
+
+

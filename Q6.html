@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        text {
+            font-family: Arial, sans-serif;
+        }
+        .tooltip {
+            position: absolute;
+            background: rgba(246, 245, 245, 0.7);
+            color: rgb(11, 10, 10);
+            padding: 8px;
+            border-radius: 5px;
+            font-size: 14px;
+            pointer-events: none;
+            visibility: hidden;
+        }
+    </style>
+</head>
+<body>
+    <svg id="chart" width="1300" height="600"></svg>
+    <div class="tooltip"></div>
+   
+    <script>
+        d3.csv("data_ggsheet - data.csv").then(data => {
+            console.log("Dữ liệu đọc từ CSV:", data);
+
+
+            data.forEach(d => {
+                d["Thời gian tạo đơn"] = new Date(d["Thời gian tạo đơn"]);
+                let hour = d["Thời gian tạo đơn"].getHours();
+                if (hour >= 8 && hour <= 23) {
+                    d.Khung_gio = `${hour}:00-${hour}:59`;
+                } else {
+                    d.Khung_gio = null;
+                }
+            });
+
+
+            data = data.filter(d => d.Khung_gio !== null);
+
+
+            const aggregatedData = d3.rollups(
+                data,
+                v => ({
+                    Tong_doanh_so: d3.sum(v, d => +d["Thành tiền"]),
+                    So_giao_dich: new Set(v.map(d => d["Thời gian tạo đơn"].toDateString())).size,
+                    Tong_san_pham: d3.sum(v, d => +d["SL"])
+                }),
+                d => d.Khung_gio
+            );
+
+
+            const processedData = aggregatedData.map(([Khung_gio, values]) => ({
+                Khung_gio,
+                Doanh_so_trung_binh: values.Tong_doanh_so / values.So_giao_dich,
+                So_luong_SKU_TB: values.Tong_san_pham / values.So_giao_dich
+            })).sort((a, b) => parseInt(a.Khung_gio.split(":")[0]) - parseInt(b.Khung_gio.split(":")[0]));
+
+
+            const width = 1300, height = 600;
+            const margin = { top: 40, right: 100, bottom: 60, left: 150 };
+
+
+            const svg = d3.select("#chart")
+                .attr("width", width)
+                .attr("height", height);
+
+
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", margin.top / 2)
+                .attr("text-anchor", "middle")
+                .style("font-size", "18px")
+                .style("font-weight", "bold")
+                .text("Doanh số trung bình theo Khung giờ");
+
+
+            // Scale trục Y (KHÔNG chia cho 1 triệu)
+            const y = d3.scaleLinear()
+                .domain([0, d3.max(processedData, d => d.Doanh_so_trung_binh)])
+                .range([height - margin.bottom, margin.top]);
+
+
+            const x = d3.scaleBand()
+                .domain(processedData.map(d => d.Khung_gio))
+                .range([margin.left, width - margin.right])
+                .padding(0.3);
+
+
+            svg.append("g")
+                .attr("transform", `translate(${margin.left - 20},0)`)
+                .call(d3.axisLeft(y).tickFormat(d => d.toLocaleString("vi-VN")));
+
+
+            svg.append("g")
+                .attr("transform", `translate(0,${height - margin.bottom})`)
+                .call(d3.axisBottom(x))
+                .selectAll("text")
+                .attr("transform", "rotate(-45)")
+                .style("text-anchor", "end");
+
+
+            const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+
+            const tooltip = d3.select(".tooltip");
+
+
+            const bars = svg.selectAll(".bar")
+                .data(processedData)
+                .enter().append("rect")
+                .attr("class", "bar")
+                .attr("x", d => x(d.Khung_gio))
+                .attr("y", d => y(d.Doanh_so_trung_binh))
+                .attr("width", x.bandwidth())
+                .attr("height", d => height - margin.bottom - y(d.Doanh_so_trung_binh))
+                .attr("fill", (d, i) => colorScale(i))
+                .on("mouseover", function(event, d) {
+                    d3.select(this).attr("opacity", 0.7);
+                    tooltip
+                        .style("visibility", "visible")
+                        .html(`
+                            <strong>${d.Khung_gio}</strong><br>
+                            Doanh số TB: ${Math.round(d.Doanh_so_trung_binh).toLocaleString("vi-VN")} VNĐ<br>
+                            Số lượng TB: ${Math.round(d.So_luong_SKU_TB)}
+                        `)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 40) + "px");
+                })
+                .on("mousemove", function(event) {
+                    tooltip
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 40) + "px");
+                })
+                .on("mouseout", function() {
+                    d3.select(this).attr("opacity", 1);
+                    tooltip.style("visibility", "hidden");
+                });
+
+
+            svg.selectAll(".label")
+                .data(processedData)
+                .enter().append("text")
+                .attr("x", d => x(d.Khung_gio) + x.bandwidth() / 2)
+                .attr("y", d => y(d.Doanh_so_trung_binh) - 5)
+                .attr("text-anchor", "middle")
+                .style("font-size", "10px")
+                .text(d => `${Math.round(d.Doanh_so_trung_binh).toLocaleString("vi-VN")} VNĐ`)
+                .attr("fill", "black");
+        }).catch(error => {
+            console.error("Lỗi khi tải file CSV:", error);
+        });
+    </script>
+</body>
+</html>
+
+
+

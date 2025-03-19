@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        text {
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <svg id="chart" width="1200" height="700"></svg>
+    <script>
+        d3.csv("data_ggsheet - data.csv").then(data => {
+            console.log("Dữ liệu đọc từ CSV:", data);
+
+
+            // Gộp doanh thu theo mặt hàng
+            const aggregatedData = d3.rollup(
+                data,
+                v => ({
+                    TongThanhTien: d3.sum(v, d => +d["Thành tiền"]),
+                    Ma_nhom_hang: v[0]["Mã nhóm hàng"]
+                }),
+                d => `[${d["Mã mặt hàng"]}] ${d["Tên mặt hàng"]}`
+            );
+
+
+            const processedData = Array.from(aggregatedData, ([Mat_hang, values]) => ({
+                Mat_hang,
+                TongThanhTien: values.TongThanhTien,
+                Ma_nhom_hang: values.Ma_nhom_hang
+            })).sort((a, b) => b.TongThanhTien - a.TongThanhTien);
+
+
+            const width = 1200, height = 700;
+            const margin = { top: 40, right: 100, bottom: 40, left: 200 };
+
+
+            const svg = d3.select("#chart")
+                .attr("width", width)
+                .attr("height", height);
+
+
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", margin.top / 2)
+                .attr("text-anchor", "middle")
+                .style("font-size", "18px")
+                .style("font-weight", "bold")
+                .text("Doanh số bán hàng theo Mặt hàng");
+
+
+            // Chia đơn vị theo triệu VND
+            const maxValue = d3.max(processedData, d => d.TongThanhTien) / 1e6;
+            const x = d3.scaleLinear()
+                .domain([0, Math.ceil(maxValue / 50) * 50]) // Làm tròn bội số của 50 triệu
+                .range([margin.left, width - margin.right]);
+
+
+            const y = d3.scaleBand()
+                .domain(processedData.map(d => d.Mat_hang))
+                .range([margin.top, height - margin.bottom])
+                .padding(0.3);
+
+
+            // Màu theo Mã Nhóm Hàng
+            const uniqueGroups = [...new Set(processedData.map(d => d.Ma_nhom_hang))];
+            const colorScale = d3.scaleOrdinal()
+                .domain(uniqueGroups)
+                .range(d3.schemeCategory10);
+
+
+            svg.append("g")
+                .attr("transform", `translate(0,${height - margin.bottom})`)
+                .call(d3.axisBottom(x).ticks(maxValue / 50).tickFormat(d => `${d}M`)); // Nhãn theo 50 triệu
+
+
+            svg.append("g")
+                .attr("transform", `translate(${margin.left},0)`)
+                .call(d3.axisLeft(y));
+
+
+            const bars = svg.selectAll(".bar")
+                .data(processedData)
+                .enter().append("rect")
+                .attr("class", "bar")
+                .attr("y", d => y(d.Mat_hang))
+                .attr("x", margin.left)
+                .attr("width", d => x(d.TongThanhTien / 1e6) - margin.left)
+                .attr("height", y.bandwidth())
+                .attr("fill", d => colorScale(d.Ma_nhom_hang)) // Đổi màu theo nhóm hàng
+                .on("mouseover", function() { d3.select(this).attr("opacity", 0.7); })
+                .on("mouseout", function() { d3.select(this).attr("opacity", 1); });
+
+
+            bars.append("title")
+                .text(d => `Thành tiền: ${d.TongThanhTien.toLocaleString()} VND`);
+
+
+            svg.selectAll(".label")
+                .data(processedData)
+                .enter().append("text")
+                .attr("x", d => x(d.TongThanhTien / 1e6) + 5)
+                .attr("y", d => y(d.Mat_hang) + y.bandwidth() / 2)
+                .attr("alignment-baseline", "middle")
+                .style("font-size", "10px")
+                .text(d => `${Math.round(d.TongThanhTien / 1e6)} triệu VND`)
+                .attr("fill", "black");
+        }).catch(error => {
+            console.error("Lỗi khi tải file CSV:", error);
+        });
+    </script>
+</body>
+</html>
+
+
+
