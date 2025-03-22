@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Doanh số bán hàng</title>
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      margin: 0; 
+      padding: 0;
+    }
+    /* Container nút bấm căn trái */
+    .button-container { 
+      margin: 20px;
+      text-align: left;
+      padding-left: 20px;
+    }
+    button { 
+      margin: 5px; 
+      padding: 10px 20px; 
+      font-size: 16px; 
+      cursor: pointer; 
+      border: 1px solid #ccc;
+      background-color: #f8f8f8;
+      border-radius: 5px;
+    }
+    button:hover {
+      background-color: #ddd;
+    }
+    /* Tăng chiều cao của iframe */
+    iframe { 
+      width: 90%;  
+      height: 900px; 
+      border: none; 
+      display: block; 
+      margin: 20px auto;
+    }
+  </style>
+</head>
+<body>
+  <!-- Bỏ tiêu đề, chỉ giữ nút bấm ở góc trái -->
+  <div class="button-container">
+      <button onclick="loadChart('Q0.html')">Q0</button>
+      <button onclick="loadChart('Q1.html')">Q1</button>
+      <button onclick="loadChart('Q2.html')">Q2</button>
+      <button onclick="loadChart('Q3.html')">Q3</button>
+      <button onclick="loadChart('Q4.html')">Q4</button>
+      <button onclick="loadChart('Q5.html')">Q5</button>
+      <button onclick="loadChart('Q6.html')">Q6</button>
+      <button onclick="loadChart('Q7.html')">Q7</button>
+      <button onclick="loadChart('Q8.html')">Q8</button>
+      <button onclick="loadChart('Q9.html')">Q9</button>
+      <button onclick="loadChart('Q10.html')">Q10</button>
+      <button onclick="loadChart('Q11.html')">Q11</button>
+      <button onclick="loadChart('Q12.html')">Q12</button>
+  </div>
+
+  <iframe id="chart-frame" src="Q1.html"></iframe>
+
+  <script>
+    function loadChart(chartFile) {
+      document.getElementById("chart-frame").src = chartFile;
+    }
+  </script>
+</body>
+</html>
